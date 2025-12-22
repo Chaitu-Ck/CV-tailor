@@ -38,7 +38,7 @@ class CVGenerator {
   /**
    * Generate optimized CV for target job
    */
-  generateOptimizedCV(cvText, jobDescription, jobTitle) {
+  async generateOptimizedCV(cvText, jobDescription, jobTitle) {
     try {
       logger.info(`📄 [${Date.now()}] Starting CV generation for: ${jobTitle}`);
 
@@ -55,7 +55,7 @@ class CVGenerator {
 
       // Generate baseline ATS
       logger.info(`[${Date.now()}] Computing baseline ATS score...`);
-      const baselineATS = atsService.computeATS(cvText, jobDescription);
+      const baselineATS = await atsService.computeATS(cvText, jobDescription);
       logger.info(`[${Date.now()}] Baseline ATS: ${baselineATS.finalATS}% ${baselineATS.color}`);
 
       // Create optimized CV sections
@@ -68,7 +68,7 @@ class CVGenerator {
 
       // Recompute ATS with optimized CV
       logger.info(`[${Date.now()}] Recomputing ATS score...`);
-      const optimizedATS = atsService.computeATS(optimizedCV.text, jobDescription);
+      const optimizedATS = await atsService.computeATS(optimizedCV.text, jobDescription);
       
       const improvement = optimizedATS.finalATS - baselineATS.finalATS;
       const improvementText = improvement > 0 ? `+${improvement}` : `${improvement}`;
@@ -228,7 +228,7 @@ class CVGenerator {
    */
   buildHeader(header) {
     const lines = [];
-    lines.push(header.name.toUpperCase());
+    if (header.name) lines.push(header.name.toUpperCase());
     
     const contact = [
       header.location ? `📍 ${header.location}` : '',
@@ -274,7 +274,7 @@ class CVGenerator {
       optimized = true;
     }
 
-    if (originalSkills.length > 0) {
+    if (originalSkills && originalSkills.length > 0) {
       lines.push('\n✓ Additional Skills:');
       lines.push(originalSkills.slice(0, 10).join(', '));
     }
@@ -289,7 +289,7 @@ class CVGenerator {
     const lines = ['PROFESSIONAL EXPERIENCE'];
     let optimized = false;
 
-    if (originalExperience.length === 0) {
+    if (!originalExperience || originalExperience.length === 0) {
       return { text: lines.join('\n'), optimized: false };
     }
 
