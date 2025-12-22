@@ -111,8 +111,8 @@ router.post('/generate-tailored', async (req, res) => {
       });
     }
 
-    // Use improved CV Generator
-    const generationResult = cvGenerator.generateOptimizedCV(
+    // Use improved CV Generator (AWAIT the async function)
+    const generationResult = await cvGenerator.generateOptimizedCV(
       masterCVText,
       jobDescription,
       jobTitle
