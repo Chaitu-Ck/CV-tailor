@@ -13,8 +13,7 @@ function CVComparison({ originalCV, generatedCV, atsImprovement }) {
 `;
       if (cv.header.phone) text += `Phone: ${cv.header.phone}
 `;
-      text += '
-';
+      text += '\n';
     }
 
     if (cv.summary) text += `SUMMARY
@@ -39,8 +38,7 @@ ${cv.skills.join(' | ')}
           text += `- ${bullet}
 `;
         });
-        text += '
-';
+        text += '\n';
       });
     }
 
