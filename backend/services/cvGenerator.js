@@ -1,11 +1,13 @@
 /**
  * CV Generator Service
  * Generates optimized CVs by restructuring and enhancing content for target job
+ * Now with Phase 3 AI integration for advanced optimization
  */
 
 const logger = require('../utils/logger');
 const atsService = require('./atsService');
 const cvParser = require('./cvParser');
+const aiOptimizer = require('./aiOptimizer');
 
 class CVGenerator {
   constructor() {
@@ -37,58 +39,85 @@ class CVGenerator {
 
   /**
    * Generate optimized CV for target job
+   * Phase 2: Basic optimization
+   * Phase 3: AI optimization (new)
    */
-  async generateOptimizedCV(cvText, jobDescription, jobTitle) {
+  async generateOptimizedCV(cvText, jobDescription, jobTitle, options = {}) {
     try {
-      logger.info(`📄 [${Date.now()}] Starting CV generation for: ${jobTitle}`);
+      const generationId = Date.now().toString();
+      logger.info(`📄 [${generationId}] Starting CV generation for: ${jobTitle}`);
+      logger.info(`[${generationId}] Phase 3: AI-Powered Optimization Enabled`);
 
       // Parse both CV and job description
       const parsedCV = cvParser.parseCV(cvText);
       const { valid, issues } = cvParser.validateStructure(parsedCV);
       
       if (issues.length > 0) {
-        logger.warn(`⚠️  [${Date.now()}] Parse issues: ${issues.join(', ')}`);
+        logger.warn(`⚠️  [${generationId}] Parse issues: ${issues.join(', ')}`);
       }
 
       // Extract job requirements
       const jobRequirements = this.extractJobRequirements(jobDescription, jobTitle);
 
       // Generate baseline ATS
-      logger.info(`[${Date.now()}] Computing baseline ATS score...`);
+      logger.info(`[${generationId}] Computing baseline ATS score...`);
       const baselineATS = await atsService.computeATS(cvText, jobDescription);
-      logger.info(`[${Date.now()}] Baseline ATS: ${baselineATS.finalATS}% ${baselineATS.color}`);
+      logger.info(`[${generationId}] Baseline ATS: ${baselineATS.finalATS}% ${baselineATS.color}`);
 
-      // Create optimized CV sections
-      const optimizedCV = this.createOptimizedCV(
+      // PHASE 2: Create structurally optimized CV
+      logger.info(`[${generationId}] Phase 2: Structural optimization...`);
+      const phase2CV = this.createOptimizedCV(
         parsedCV,
         jobRequirements,
         jobDescription,
         baselineATS
       );
 
-      // Recompute ATS with optimized CV
-      logger.info(`[${Date.now()}] Recomputing ATS score...`);
-      const optimizedATS = await atsService.computeATS(optimizedCV.text, jobDescription);
+      // PHASE 3: Apply AI optimization
+      logger.info(`[${generationId}] Phase 3: AI optimization...`);
+      const aiResult = await aiOptimizer.optimizeCV(
+        phase2CV.text,
+        jobDescription,
+        jobTitle
+      );
+
+      const optimizedCVText = aiResult.optimizedText || phase2CV.text;
+
+      // Recompute ATS with fully optimized CV
+      logger.info(`[${generationId}] Recomputing ATS score...`);
+      const optimizedATS = await atsService.computeATS(optimizedCVText, jobDescription);
       
       const improvement = optimizedATS.finalATS - baselineATS.finalATS;
       const improvementText = improvement > 0 ? `+${improvement}` : `${improvement}`;
-      logger.info(`[${Date.now()}] ATS: ${baselineATS.finalATS}% → ${optimizedATS.finalATS}% (${improvementText}%)`);
+      logger.info(`[${generationId}] ATS: ${baselineATS.finalATS}% → ${optimizedATS.finalATS}% (${improvementText}%)`);
 
-      logger.info(`✅ [${Date.now()}] CV generation completed successfully`);
+      // Combine all optimizations
+      const allOptimizations = [
+        ...phase2CV.optimizations,
+        ...(aiResult.improvements || [])
+      ];
+
+      logger.info(`✅ [${generationId}] CV generation completed successfully`);
 
       return {
-        generationId: Date.now().toString(),
+        generationId,
         originalText: cvText,
-        generatedText: optimizedCV.text,
+        generatedText: optimizedCVText,
         atsScore: {
           before: baselineATS,
           after: optimizedATS,
           improvement: Math.round(improvement),
           improvementPercent: improvement > 0 ? `+${Math.round(improvement)}%` : `${Math.round(improvement)}%`
         },
-        optimizations: optimizedCV.optimizations,
+        optimizations: allOptimizations,
+        aiOptimizations: aiResult.improvements || [],
+        recommendations: aiResult.recommendations || [],
         jobTitle: jobTitle,
-        appliedChanges: optimizedCV.appliedChanges
+        appliedChanges: {
+          ...phase2CV.appliedChanges,
+          aiOptimized: aiResult.aiEnabled,
+          stats: aiResult.stats || {}
+        }
       };
     } catch (error) {
       logger.error('❌ CV generation failed:', error);
@@ -156,7 +185,7 @@ class CVGenerator {
   }
 
   /**
-   * Create optimized CV with enhancements
+   * Create optimized CV with enhancements (Phase 2)
    */
   createOptimizedCV(parsedCV, jobRequirements, jobDescription, baselineATS) {
     const optimizations = [];
@@ -228,13 +257,13 @@ class CVGenerator {
    */
   buildHeader(header) {
     const lines = [];
-    if (header.name) lines.push(header.name.toUpperCase());
+    if (header && header.name) lines.push(header.name.toUpperCase());
     
     const contact = [
-      header.location ? `📍 ${header.location}` : '',
-      header.phone ? `📞 ${header.phone}` : '',
-      header.email ? `📧 ${header.email}` : '',
-      header.linkedin ? `🔗 ${header.linkedin}` : ''
+      header && header.location ? `📍 ${header.location}` : '',
+      header && header.phone ? `📞 ${header.phone}` : '',
+      header && header.email ? `📧 ${header.email}` : '',
+      header && header.linkedin ? `🔗 ${header.linkedin}` : ''
     ].filter(x => x).join(' | ');
     
     if (contact) lines.push(contact);
@@ -267,9 +296,9 @@ class CVGenerator {
 
     if (jobRequirements.requiredSkills.length > 0) {
       lines.push('\n✓ Required Skills (Matched):');
-      const matchedSkills = originalSkills.filter(s => 
+      const matchedSkills = originalSkills && originalSkills.filter(s => 
         jobRequirements.requiredSkills.some(req => s.toLowerCase().includes(req) || req.includes(s.toLowerCase()))
-      );
+      ) || [];
       lines.push(matchedSkills.length > 0 ? matchedSkills.join(', ') : jobRequirements.requiredSkills.slice(0, 3).join(', '));
       optimized = true;
     }
