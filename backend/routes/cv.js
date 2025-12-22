@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const atsService = require('../services/atsService');
 const cvParser = require('../services/cvParser');
+const cvGenerator = require('../services/cvGenerator');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
@@ -79,6 +80,7 @@ router.post('/parse', async (req, res) => {
 /**
  * POST /api/cv/generate-tailored
  * Generate job-tailored CV with ATS analysis (MAIN ENDPOINT)
+ * Now uses improved CV Generator with keyword optimization
  */
 router.post('/generate-tailored', async (req, res) => {
   const startTime = Date.now();
@@ -89,7 +91,7 @@ router.post('/generate-tailored', async (req, res) => {
       masterCVText,
       jobDescription,
       jobTitle = 'Unknown Job',
-      templateType = 'mix'
+      templateType = 'modern'
     } = req.body;
 
     // Validate inputs
@@ -109,80 +111,50 @@ router.post('/generate-tailored', async (req, res) => {
       });
     }
 
-    logger.info(`📄 [${generationId}] Starting CV generation for: ${jobTitle}`);
-
-    // Step 1: Parse master CV
-    const parsedCV = cvParser.parseCV(masterCVText);
-    const parseValidation = cvParser.validateStructure(parsedCV);
-
-    if (!parseValidation.valid) {
-      logger.warn(`⚠️  [${generationId}] Parse issues: ${parseValidation.issues.join(', ')}`);
-    }
-
-    // Step 2: Compute baseline ATS score
-    logger.info(`[${generationId}] Computing baseline ATS score...`);
-    const atsBeforeRewrite = await atsService.computeATS(
+    // Use improved CV Generator
+    const generationResult = cvGenerator.generateOptimizedCV(
       masterCVText,
-      jobDescription
-    );
-    logger.info(
-      `[${generationId}] Baseline ATS: ${atsBeforeRewrite.finalATS}% ${atsBeforeRewrite.color}`
+      jobDescription,
+      jobTitle
     );
 
-    // Step 3: For now, the optimized text is the same (will be enhanced with AI later)
-    // In production, this would call Gemini API for AI optimization
-    const optimizedText = masterCVText;
-
-    // Step 4: Compute final ATS score
-    logger.info(`[${generationId}] Recomputing ATS score...`);
-    const atsAfterRewrite = await atsService.computeATS(
-      optimizedText,
-      jobDescription
-    );
-    const atsImprovement = atsAfterRewrite.finalATS - atsBeforeRewrite.finalATS;
-
-    logger.info(
-      `[${generationId}] ATS: ${atsBeforeRewrite.finalATS}% → ${atsAfterRewrite.finalATS}% (+${atsImprovement}%)`
-    );
-
-    // Step 5: Parse optimized CV
-    const optimizedParsed = cvParser.parseCV(optimizedText);
+    // Parse optimized CV for response
+    const optimizedParsed = cvParser.parseCV(generationResult.generatedText);
 
     const totalTimeMs = Date.now() - startTime;
 
     // Build response
     const response = {
       success: true,
-      generationId,
+      generationId: generationResult.generationId,
       atsScore: {
-        finalATS: atsAfterRewrite.finalATS,
-        color: atsAfterRewrite.color,
-        colorName: atsAfterRewrite.colorName,
-        keywordScore: atsAfterRewrite.keywordScore,
-        skillScore: atsAfterRewrite.skillScore.percent,
-        tfidfScore: atsAfterRewrite.tfidfScore,
-        embeddingScore: atsAfterRewrite.embeddingScore,
-        missingKeywords: atsAfterRewrite.missingKeywords.slice(0, 5),
-        missingSkills: atsAfterRewrite.skillScore.missingSkills.slice(0, 5),
-        recommendations: atsAfterRewrite.recommendations,
-        advice: atsAfterRewrite.advice
+        finalATS: generationResult.atsScore.after.finalATS,
+        color: generationResult.atsScore.after.color,
+        colorName: generationResult.atsScore.after.colorName,
+        keywordScore: generationResult.atsScore.after.keywordScore,
+        skillScore: generationResult.atsScore.after.skillScore.percent,
+        tfidfScore: generationResult.atsScore.after.tfidfScore,
+        embeddingScore: generationResult.atsScore.after.embeddingScore,
+        missingKeywords: generationResult.atsScore.after.missingKeywords.slice(0, 5),
+        missingSkills: generationResult.atsScore.after.skillScore.missingSkills.slice(0, 5),
+        recommendations: generationResult.atsScore.after.recommendations,
+        advice: generationResult.atsScore.after.advice
       },
       atsComparison: {
-        before: atsBeforeRewrite.finalATS,
-        after: atsAfterRewrite.finalATS,
-        improvement: atsImprovement,
-        improvementPercent: atsBeforeRewrite.finalATS === 0 ? 0
-          : parseFloat(((atsImprovement / atsBeforeRewrite.finalATS) * 100).toFixed(1))
+        before: generationResult.atsScore.before.finalATS,
+        after: generationResult.atsScore.after.finalATS,
+        improvement: generationResult.atsScore.improvement,
+        improvementPercent: generationResult.atsScore.improvementPercent
       },
       generatedCV: optimizedParsed,
+      optimizations: generationResult.optimizations,
+      appliedChanges: generationResult.appliedChanges,
       jobTitle,
       templateType,
       metrics: {
         totalTimeMs
       }
     };
-
-    logger.info(`✅ [${generationId}] CV generation completed successfully`);
 
     res.json(response);
   } catch (err) {
