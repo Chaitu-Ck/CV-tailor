@@ -3,30 +3,33 @@ import React from 'react';
 function ATSCard({ atsScore }) {
   if (!atsScore) return null;
 
-  // Handle skillScore - can be a number or object
+  // Safe handling of skillScore - can be a number or object
   const skillScoreValue = typeof atsScore.skillScore === 'object' 
-    ? atsScore.skillScore.percent 
-    : atsScore.skillScore;
+    ? (atsScore.skillScore?.percent || 0)
+    : (atsScore.skillScore || 0);
 
   const skillScoreObject = typeof atsScore.skillScore === 'object'
     ? atsScore.skillScore
     : null;
 
+  // Safe handling of scoreRange
+  const scoreRange = atsScore.scoreRange || { min: 0, max: 100 };
+
   return (
     <div className="ats-card">
       <div className="ats-score">
         <div>
-          <div className="ats-number">{atsScore.finalATS}%</div>
-          <div className="ats-name">{atsScore.colorName}</div>
+          <div className="ats-number">{atsScore.finalATS || 0}%</div>
+          <div className="ats-name">{atsScore.colorName || 'Unknown'}</div>
         </div>
-        <div className="ats-emoji">{atsScore.color}</div>
+        <div className="ats-emoji">{atsScore.color || '⚪'}</div>
       </div>
 
       {/* Score Breakdown */}
       <div className="ats-breakdown">
         <div className="breakdown-item">
           <div className="breakdown-item-label">Keywords</div>
-          <div className="breakdown-item-value">{atsScore.keywordScore}%</div>
+          <div className="breakdown-item-value">{atsScore.keywordScore || 0}%</div>
           <div className="breakdown-item-weight">30% weight</div>
         </div>
         <div className="breakdown-item">
@@ -36,18 +39,18 @@ function ATSCard({ atsScore }) {
         </div>
         <div className="breakdown-item">
           <div className="breakdown-item-label">TF-IDF</div>
-          <div className="breakdown-item-value">{atsScore.tfidfScore}%</div>
+          <div className="breakdown-item-value">{atsScore.tfidfScore || 0}%</div>
           <div className="breakdown-item-weight">20% weight</div>
         </div>
         <div className="breakdown-item">
           <div className="breakdown-item-label">Embeddings</div>
-          <div className="breakdown-item-value">{atsScore.embeddingScore}%</div>
+          <div className="breakdown-item-value">{atsScore.embeddingScore || 0}%</div>
           <div className="breakdown-item-weight">25% weight</div>
         </div>
       </div>
 
       {/* Missing Keywords */}
-      {atsScore.missingKeywords && atsScore.missingKeywords.length > 0 && (
+      {atsScore.missingKeywords && Array.isArray(atsScore.missingKeywords) && atsScore.missingKeywords.length > 0 && (
         <div className="missing-section">
           <h4>🔍 Missing Keywords ({atsScore.missingKeywords.length})</h4>
           <div className="missing-items">
@@ -59,7 +62,7 @@ function ATSCard({ atsScore }) {
       )}
 
       {/* Missing Skills */}
-      {skillScoreObject && skillScoreObject.missingSkills && skillScoreObject.missingSkills.length > 0 && (
+      {skillScoreObject && Array.isArray(skillScoreObject.missingSkills) && skillScoreObject.missingSkills.length > 0 && (
         <div className="missing-section">
           <h4>🔧 Missing Hard Skills ({skillScoreObject.missingSkills.length})</h4>
           <div className="missing-items">
@@ -71,7 +74,7 @@ function ATSCard({ atsScore }) {
       )}
 
       {/* Recommendations */}
-      {atsScore.recommendations && atsScore.recommendations.length > 0 && (
+      {atsScore.recommendations && Array.isArray(atsScore.recommendations) && atsScore.recommendations.length > 0 && (
         <div className="recommendations">
           <h4>📚 Recommendations</h4>
           {atsScore.recommendations.map((rec, idx) => (
@@ -81,7 +84,7 @@ function ATSCard({ atsScore }) {
       )}
 
       {/* Advice */}
-      {atsScore.advice && atsScore.advice.length > 0 && (
+      {atsScore.advice && Array.isArray(atsScore.advice) && atsScore.advice.length > 0 && (
         <div className="recommendations" style={{ background: '#dcfce7', borderColor: '#22c55e' }}>
           <h4 style={{ color: '#16a34a' }}>💡 Tips for Improvement</h4>
           {atsScore.advice.map((tip, idx) => (
@@ -93,16 +96,18 @@ function ATSCard({ atsScore }) {
       )}
 
       {/* Score Range Info */}
-      <div style={{
-        marginTop: '20px',
-        padding: '12px',
-        background: '#f0f9ff',
-        borderRadius: '6px',
-        fontSize: '0.85rem',
-        color: '#0c4a6e'
-      }}>
-        <strong>ATS Score Range:</strong> {atsScore.scoreRange.min}-{atsScore.scoreRange.max}% = {atsScore.colorName}
-      </div>
+      {scoreRange && (
+        <div style={{
+          marginTop: '20px',
+          padding: '12px',
+          background: '#f0f9ff',
+          borderRadius: '6px',
+          fontSize: '0.85rem',
+          color: '#0c4a6e'
+        }}>
+          <strong>ATS Score Range:</strong> {scoreRange.min}-{scoreRange.max}% = {atsScore.colorName}
+        </div>
+      )}
     </div>
   );
 }
