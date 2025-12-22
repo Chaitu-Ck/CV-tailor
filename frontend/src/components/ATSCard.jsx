@@ -3,6 +3,15 @@ import React from 'react';
 function ATSCard({ atsScore }) {
   if (!atsScore) return null;
 
+  // Handle skillScore - can be a number or object
+  const skillScoreValue = typeof atsScore.skillScore === 'object' 
+    ? atsScore.skillScore.percent 
+    : atsScore.skillScore;
+
+  const skillScoreObject = typeof atsScore.skillScore === 'object'
+    ? atsScore.skillScore
+    : null;
+
   return (
     <div className="ats-card">
       <div className="ats-score">
@@ -22,7 +31,7 @@ function ATSCard({ atsScore }) {
         </div>
         <div className="breakdown-item">
           <div className="breakdown-item-label">Hard Skills</div>
-          <div className="breakdown-item-value">{atsScore.skillScore}%</div>
+          <div className="breakdown-item-value">{skillScoreValue}%</div>
           <div className="breakdown-item-weight">25% weight</div>
         </div>
         <div className="breakdown-item">
@@ -50,11 +59,11 @@ function ATSCard({ atsScore }) {
       )}
 
       {/* Missing Skills */}
-      {atsScore.skillScore && atsScore.skillScore.missingSkills && atsScore.skillScore.missingSkills.length > 0 && (
+      {skillScoreObject && skillScoreObject.missingSkills && skillScoreObject.missingSkills.length > 0 && (
         <div className="missing-section">
-          <h4>🔧 Missing Hard Skills ({atsScore.skillScore.missingSkills.length})</h4>
+          <h4>🔧 Missing Hard Skills ({skillScoreObject.missingSkills.length})</h4>
           <div className="missing-items">
-            {atsScore.skillScore.missingSkills.slice(0, 5).map((skill, idx) => (
+            {skillScoreObject.missingSkills.slice(0, 5).map((skill, idx) => (
               <span key={idx} className="tag">{skill}</span>
             ))}
           </div>
