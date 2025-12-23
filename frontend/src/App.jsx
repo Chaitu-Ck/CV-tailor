@@ -6,6 +6,7 @@ import JobDescriptionInput from './components/JobDescriptionInput';
 import ATSCard from './components/ATSCard';
 import CVComparison from './components/CVComparison';
 import GenerationProgress from './components/GenerationProgress';
+import { cvAPI } from './api/cv';
 import './App.css';
 
 function App() {
@@ -44,26 +45,17 @@ function App() {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('cvFile', cvFile);
-      formData.append('jobDescription', jobDescription);
-
-      const response = await fetch('/api/cv/analyze-docx', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to analyze DOCX');
+      const response = await cvAPI.analyzeDocx(cvFile, jobDescription);
+      
+      if (response.success) {
+        setATSScore(response.data);
+        setAnalysisResult(response.data);
+        toast.success('DOCX analyzed successfully!');
+      } else {
+        throw new Error(response.error);
       }
-
-      const data = await response.json();
-      setATSScore(data);
-      setAnalysisResult(data);
-      toast.success('DOCX analyzed successfully!');
     } catch (error) {
-      toast.error(error.message || 'Error analyzing DOCX');
+      toast.error(error.message || 'Error analyzing document');
     } finally {
       setLoading(false);
     }
@@ -87,27 +79,18 @@ function App() {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('cvFile', cvFile);
-      formData.append('jobDescription', jobDescription);
-
-      const response = await fetch('/api/cv/optimize-docx', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to optimize DOCX');
+      const response = await cvAPI.optimizeDocx(cvFile, jobDescription);
+      
+      if (response.success) {
+        setGenerationData(response.data);
+        setATSScore(response.data);
+        setStep(3);
+        toast.success('Document optimized successfully!');
+      } else {
+        throw new Error(response.error);
       }
-
-      const data = await response.json();
-      setGenerationData(data);
-      setATSScore(data);
-      setStep(3);
-      toast.success('DOCX optimized successfully!');
     } catch (error) {
-      toast.error(error.message || 'Error optimizing DOCX');
+      toast.error(error.message || 'Error optimizing document');
     } finally {
       setLoading(false);
     }
@@ -131,33 +114,13 @@ function App() {
 
     setDownloading(true);
     try {
-      const formData = new FormData();
-      formData.append('cvFile', cvFile);
-      formData.append('jobDescription', jobDescription);
-
-      const response = await fetch('/api/cv/fix-docx-ats', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fix DOCX');
-      }
-
-      // Create download link from response
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', `${cvFile.name.replace('.docx', '')}_ATS_Fixed.docx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      const response = await cvAPI.fixDocx(cvFile, jobDescription);
       
-      toast.success('📄 Fixed DOCX downloaded successfully!');
+      if (!response.success) {
+        throw new Error(response.error);
+      }
     } catch (error) {
-      toast.error(error.message || 'Error downloading DOCX');
+      toast.error(error.message || 'Error downloading document');
     } finally {
       setDownloading(false);
     }
@@ -166,7 +129,6 @@ function App() {
   const handleDownloadPDF = async () => {
     toast.warn('PDF export is not available in the DOCX-only version. Please use the DOCX download option.');
   };
-
 
 
   const handleRegenerateCV = () => {
@@ -228,7 +190,7 @@ function App() {
                     onClick={handleGenerateTailoredCV}
                     disabled={loading}
                   >
-                    {loading ? 'Optimizing...' : '✨ Optimize DOCX for ATS'}
+                    {loading ? 'Optimizing...' : '✨ Optimize Document for ATS'}
                   </button>
                 )}
               </div>
@@ -270,7 +232,7 @@ function App() {
                 onClick={handleDownloadDOCX}
                 disabled={downloading}
               >
-                {downloading ? '⏳ Preparing...' : '📄 Download DOCX'}
+                {downloading ? '⏳ Preparing...' : '📄 Download Optimized'}
               </button>
               <button 
                 className="btn btn-download" 
@@ -280,7 +242,7 @@ function App() {
                 {downloading ? '⏳ Preparing...' : '📑 Download PDF'}
               </button>
               <button className="btn btn-regenerate" onClick={handleRegenerateCV}>🔄 Regenerate</button>
-              <button className="btn btn-new" onClick={() => { setStep(1); setCVFile(null); setJobDescription(''); setATSScore(null); setOriginalCV(null); setGenerationData(null); setAnalysisResult(null); }}>➕ New DOCX</button>
+              <button className="btn btn-new" onClick={() => { setStep(1); setCVFile(null); setJobDescription(''); setATSScore(null); setOriginalCV(null); setGenerationData(null); setAnalysisResult(null); }}>➕ New Document</button>
             </div>
           </>
         )}

@@ -1,8 +1,7 @@
 /**
- * CV Routes - DOCX-ONLY
+ * CV Routes - Universal Document Support
  * 
- * All text-based endpoints removed
- * Pure DOCX workflow
+ * Support for DOCX, ODF, and PDF files
  */
 
 const express = require('express');
@@ -10,16 +9,15 @@ const router = express.Router();
 const path = require('path');
 const { upload, validateDocx, handleUploadError } = require('../middleware/uploadMiddleware');
 const docxAtsService = require('../services/docxAtsService');
-const docxModifier = require('../services/docxModifier');
-const docxReader = require('../services/docxReader');
+const universalAtsService = require('../services/universalAtsService');
 const logger = require('../utils/logger');
 
 /**
  * POST /api/cv/analyze-docx
- * Analyze DOCX for ATS compatibility (no modifications)
+ * Analyze document for ATS compatibility (no modifications)
  * 
  * Body: multipart/form-data
- * - cvFile: DOCX file
+ * - cvFile: DOCX, ODT, or PDF file
  * - jobDescription: text
  */
 router.post(
@@ -41,8 +39,8 @@ router.post(
         });
       }
 
-      // Analyze DOCX
-      const result = await docxAtsService.validateDocxAts(
+      // Analyze document using universal service
+      const result = await universalAtsService.validateDocumentAts(
         req.file.buffer,
         jobDescription
       );
@@ -57,7 +55,7 @@ router.post(
       });
 
     } catch (error) {
-      logger.error('DOCX analysis failed:', error);
+      logger.error('Document analysis failed:', error);
       res.status(500).json({
         error: 'Analysis failed',
         message: error.message
@@ -68,10 +66,10 @@ router.post(
 
 /**
  * POST /api/cv/fix-docx-ats
- * Fix ATS issues in DOCX and return modified file
+ * Fix ATS issues in document and return modified file
  * 
  * Body: multipart/form-data
- * - cvFile: DOCX file
+ * - cvFile: DOCX, ODT, or PDF file
  * - fixOptions: JSON string (optional)
  */
 router.post(
@@ -85,33 +83,47 @@ router.post(
       const fixOptions = req.body.fixOptions ? 
         JSON.parse(req.body.fixOptions) : {};
 
-      // Read DOCX to get structure
-      const docxData = await docxReader.readDocx(req.file.buffer);
-
-      // Fix ATS issues
-      const fixed = await docxModifier.fixAtsIssues(
+      // Determine file type using universal service
+      const fileType = await universalAtsService.getFileType(req.file.buffer);
+      
+      // Use universal service to fix ATS issues
+      const docData = await universalAtsService.validateDocumentAts(req.file.buffer, req.body.jobDescription || '');
+      
+      // Fix ATS issues using universal service
+      const fixed = await universalAtsService.fixDocumentAtsIssues(
         req.file.buffer,
-        docxData.structure,
+        docData.structure,
+        fileType,
         fixOptions
       );
 
       // Generate filename
       const originalName = path.parse(req.file.originalname).name;
-      const modifiedFilename = `${originalName}_ATS_Fixed.docx`;
+      const fileExtension = req.file.originalname.split('.').pop().toLowerCase();
+      const modifiedFilename = `${originalName}_ATS_Fixed.${fileExtension}`;
 
       // Set headers for file download
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      let contentType = 'application/octet-stream';
+      if (fileExtension === 'docx') {
+        contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (fileExtension === 'odt') {
+        contentType = 'application/vnd.oasis.opendocument.text';
+      } else if (fileExtension === 'pdf') {
+        contentType = 'application/pdf';
+      }
+      
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${modifiedFilename}"`);
       res.setHeader('X-Modifications', JSON.stringify(fixed.modifications));
       res.setHeader('X-Processing-Time', fixed.processingTimeMs);
 
-      // Send modified DOCX
+      // Send modified document
       res.send(fixed.buffer);
 
-      logger.info(`✅ DOCX fixed and sent: ${modifiedFilename}`);
+      logger.info(`✅ Document fixed and sent: ${modifiedFilename}`);
 
     } catch (error) {
-      logger.error('DOCX fix failed:', error);
+      logger.error('Document fix failed:', error);
       res.status(500).json({
         error: 'Fix failed',
         message: error.message
@@ -125,7 +137,7 @@ router.post(
  * Analyze + Fix + AI Optimization (complete workflow)
  * 
  * Body: multipart/form-data
- * - cvFile: DOCX file
+ * - cvFile: DOCX, ODT, or PDF file
  * - jobDescription: text
  */
 router.post(
@@ -146,47 +158,23 @@ router.post(
         });
       }
 
-      // Step 1: Analyze
-      const analysis = await docxAtsService.validateDocxAts(
+      // Use universal service to optimize document
+      const result = await universalAtsService.optimizeDocument(
         req.file.buffer,
-        jobDescription
-      );
-
-      // Step 2: Fix structure issues
-      const docxData = await docxReader.readDocx(req.file.buffer);
-      const fixed = await docxModifier.fixAtsIssues(
-        req.file.buffer,
-        docxData.structure
-      );
-
-      // Step 3: Re-analyze to confirm improvements
-      const reanalysis = await docxAtsService.validateDocxAts(
-        fixed.buffer,
         jobDescription
       );
 
       // Generate filename
       const originalName = path.parse(req.file.originalname).name;
-      const optimizedFilename = `${originalName}_ATS_Optimized.docx`;
+      const fileExtension = req.file.originalname.split('.').pop().toLowerCase();
+      const optimizedFilename = `${originalName}_ATS_Optimized.${fileExtension}`;
 
-      // Return both analysis and file
+      // Return analysis and file info
       res.json({
         success: true,
-        analysis: {
-          before: {
-            score: analysis.finalScore,
-            issues: analysis.breakdown.structure.issues.length,
-            warnings: analysis.breakdown.structure.warnings.length
-          },
-          after: {
-            score: reanalysis.finalScore,
-            issues: reanalysis.breakdown.structure.issues.length,
-            warnings: reanalysis.breakdown.structure.warnings.length
-          },
-          improvement: reanalysis.finalScore - analysis.finalScore
-        },
-        modifications: fixed.modifications,
-        recommendations: reanalysis.recommendations,
+        analysis: result.analysis,
+        modifications: result.modifications,
+        recommendations: result.recommendations,
         download: {
           filename: optimizedFilename,
           url: `/api/cv/download/${req.file.originalname}` // Implement download endpoint
@@ -195,7 +183,7 @@ router.post(
       });
 
     } catch (error) {
-      logger.error('DOCX optimization failed:', error);
+      logger.error('Document optimization failed:', error);
       res.status(500).json({
         error: 'Optimization failed',
         message: error.message
@@ -210,9 +198,10 @@ router.post(
  */
 router.get('/health', (req, res) => {
   res.json({
-    service: 'CV Tailor DOCX Service',
+    service: 'CV Tailor Universal Service',
     status: 'healthy',
     version: '2.0.0',
+    supportedFormats: ['docx', 'odt', 'pdf'],
     timestamp: new Date().toISOString()
   });
 });

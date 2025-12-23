@@ -13,8 +13,10 @@ const logger = require('../utils/logger');
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = [
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/octet-stream' // Some browsers send this for .docx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+  'application/vnd.oasis.opendocument.text', // ODT
+  'application/pdf', // PDF
+  'application/octet-stream' // Some browsers send this for .docx/.odt/.pdf
 ];
 
 // Memory storage (no disk writes)
@@ -25,8 +27,8 @@ const fileFilter = async (req, file, cb) => {
   try {
     // Check extension
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.docx') {
-      return cb(new Error('Only DOCX files are allowed'), false);
+    if (ext !== '.docx' && ext !== '.odt' && ext !== '.pdf') {
+      return cb(new Error('Only DOCX, ODT, and PDF files are allowed'), false);
     }
 
     // Check MIME type (basic)
@@ -67,34 +69,54 @@ const validateDocx = async (req, res, next) => {
     // Magic byte validation
     const fileTypeResult = await fileTypeFromBuffer(req.file.buffer);
     
-    // DOCX is a ZIP file
-    if (!fileTypeResult || fileTypeResult.ext !== 'zip') {
+    // DOCX/ODT is a ZIP file, PDF has its own signature
+    if (!fileTypeResult || (fileTypeResult.ext !== 'zip' && fileTypeResult.ext !== 'pdf')) {
+      logger.warn(`File type validation failed: ${fileTypeResult ? fileTypeResult.ext : 'unknown'}`);
       return res.status(400).json({
-        error: 'Invalid DOCX file',
-        message: 'File is not a valid DOCX document (ZIP signature missing)'
+        error: 'Invalid document file',
+        message: 'File is not a valid DOCX/ODT/PDF document (invalid signature)'
       });
+    } else {
+      logger.info(`File type validated: ${fileTypeResult.ext}, MIME: ${req.file.mimetype}`);
     }
 
-    // Verify it's actually DOCX (has word/document.xml)
-    const AdmZip = require('adm-zip');
-    try {
-      const zip = new AdmZip(req.file.buffer);
-      const docXml = zip.getEntry('word/document.xml');
-      
-      if (!docXml) {
+    // Verify it's actually DOCX/ODT/PDF
+    const pdfSignature = req.file.buffer.slice(0, 4).toString();
+    
+    if (pdfSignature === '%PDF') {
+      // This is a PDF file, validation already done via file-type
+      logger.info(`✅ Valid PDF document uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
+    } else {
+      // This should be a ZIP-based file (DOCX/ODT)
+      const AdmZip = require('adm-zip');
+      try {
+        const zip = new AdmZip(req.file.buffer);
+        
+        // Check for DOCX structure
+        const isDocx = zip.getEntry('word/document.xml');
+        
+        // Check for ODT structure
+        const isOdt = zip.getEntry('content.xml');
+        
+        if (!isDocx && !isOdt) {
+          return res.status(400).json({
+            error: 'Invalid document structure',
+            message: 'File is not a valid DOCX (missing word/document.xml) or ODT (missing content.xml)'
+          });
+        }
+        
+        if (isDocx) {
+          logger.info(`✅ Valid DOCX document uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
+        } else if (isOdt) {
+          logger.info(`✅ Valid ODT document uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
+        }
+      } catch (zipError) {
         return res.status(400).json({
-          error: 'Invalid DOCX structure',
-          message: 'File is not a valid DOCX document (missing document.xml)'
+          error: 'Corrupted document file',
+          message: 'Unable to read document structure'
         });
       }
-    } catch (zipError) {
-      return res.status(400).json({
-        error: 'Corrupted DOCX file',
-        message: 'Unable to read DOCX structure'
-      });
     }
-
-    logger.info(`✅ Valid DOCX uploaded: ${req.file.originalname} (${req.file.size} bytes)`);
     next();
 
   } catch (error) {

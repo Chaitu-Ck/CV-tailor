@@ -18,10 +18,14 @@ function CVUploader({ onUpload }) {
       return;
     }
 
-    // Only allow DOCX files in the DOCX-only system
+    // Allow DOCX, ODF, and PDF files
     if (!fileName.endsWith('.docx') && 
-        file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      toast.error('Only DOCX files are supported in the DOCX-only system');
+        !fileName.endsWith('.odt') &&
+        !fileName.endsWith('.pdf') &&
+        file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' &&
+        file.type !== 'application/vnd.oasis.opendocument.text' &&
+        file.type !== 'application/pdf') {
+      toast.error('Only DOCX, ODT, and PDF files are supported');
       return;
     }
 
@@ -61,16 +65,16 @@ function CVUploader({ onUpload }) {
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
       >
-        <div className="upload-icon">📄</div>
+        <div className="upload-icon">📤</div>
         <h3>Drop your CV here or click to browse</h3>
         <p style={{ color: '#6b7280', fontSize: '0.9rem', marginTop: '10px' }}>
-          Supported: DOCX only | Max: 10MB
+          Supported: DOCX, ODT, PDF | Max: 10MB
         </p>
       </div>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".docx"
+        accept=".docx,.odt,.pdf"
         onChange={handleChange}
       />
 
