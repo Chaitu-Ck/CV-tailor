@@ -14,6 +14,7 @@ function App() {
   const [jobTitle, setJobTitle] = useState('');
   const [atsScore, setATSScore] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [step, setStep] = useState(1); // 1: Upload, 2: Preview, 3: Results
   const [generationData, setGenerationData] = useState(null);
   const [originalCV, setOriginalCV] = useState(null);
@@ -81,6 +82,144 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownloadDOCX = async () => {
+    if (!generationData) {
+      toast.error('No CV to download');
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      // Reconstruct CV text from generated CV data
+      const cvTextToExport = reconstructCVText(generationData.generatedCV);
+
+      const response = await fetch('/api/cv/export-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cvText: cvTextToExport,
+          jobTitle: jobTitle || 'CV'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate DOCX');
+
+      const data = await response.json();
+      
+      // Open download URL in new tab
+      window.open(data.downloadUrl, '_blank');
+      toast.success('📄 DOCX downloaded successfully!');
+    } catch (error) {
+      toast.error(error.message || 'Error downloading DOCX');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!generationData) {
+      toast.error('No CV to download');
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      // Reconstruct CV text from generated CV data
+      const cvTextToExport = reconstructCVText(generationData.generatedCV);
+
+      const response = await fetch('/api/cv/export-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cvText: cvTextToExport,
+          jobTitle: jobTitle || 'CV'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate PDF');
+
+      const data = await response.json();
+      
+      // Open download URL in new tab
+      window.open(data.downloadUrl, '_blank');
+      toast.success('📑 PDF downloaded successfully!');
+    } catch (error) {
+      toast.error(error.message || 'Error downloading PDF');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Helper function to reconstruct CV text from parsed CV object
+  const reconstructCVText = (parsedCV) => {
+    const lines = [];
+
+    // Header
+    if (parsedCV.header) {
+      if (parsedCV.header.name) lines.push(parsedCV.header.name.toUpperCase());
+      const contact = [
+        parsedCV.header.location,
+        parsedCV.header.phone,
+        parsedCV.header.email,
+        parsedCV.header.linkedin
+      ].filter(x => x).join(' | ');
+      if (contact) lines.push(contact);
+      lines.push('');
+    }
+
+    // Summary
+    if (parsedCV.summary) {
+      lines.push('PROFESSIONAL SUMMARY');
+      lines.push(parsedCV.summary);
+      lines.push('');
+    }
+
+    // Skills
+    if (parsedCV.skills && parsedCV.skills.length > 0) {
+      lines.push('CORE COMPETENCIES');
+      lines.push(parsedCV.skills.join(', '));
+      lines.push('');
+    }
+
+    // Experience
+    if (parsedCV.experience && parsedCV.experience.length > 0) {
+      lines.push('PROFESSIONAL EXPERIENCE');
+      parsedCV.experience.forEach(exp => {
+        lines.push('');
+        lines.push(`${exp.title} | ${exp.company}`);
+        if (exp.startDate || exp.endDate) {
+          lines.push(`${exp.startDate || ''} - ${exp.endDate || 'Present'}`);
+        }
+        if (exp.bullets) {
+          exp.bullets.forEach(bullet => {
+            lines.push(`  • ${bullet}`);
+          });
+        }
+      });
+      lines.push('');
+    }
+
+    // Education
+    if (parsedCV.education && parsedCV.education.length > 0) {
+      lines.push('EDUCATION');
+      parsedCV.education.forEach(edu => {
+        lines.push(`${edu.degree} | ${edu.institution}`);
+        if (edu.year) lines.push(`Year: ${edu.year}`);
+      });
+      lines.push('');
+    }
+
+    // Certifications
+    if (parsedCV.certifications && parsedCV.certifications.length > 0) {
+      lines.push('CERTIFICATIONS');
+      parsedCV.certifications.forEach(cert => {
+        lines.push(`  ✓ ${cert}`);
+      });
+    }
+
+    return lines.join('\n');
   };
 
   const handleRegenerateCV = () => {
@@ -178,7 +317,20 @@ function App() {
             />
 
             <div className="action-buttons">
-              <button className="btn btn-download" onClick={() => alert('Download feature coming soon!')}>⬇️ Download DOCX</button>
+              <button 
+                className="btn btn-download" 
+                onClick={handleDownloadDOCX}
+                disabled={downloading}
+              >
+                {downloading ? '⏳ Preparing...' : '📄 Download DOCX'}
+              </button>
+              <button 
+                className="btn btn-download" 
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+              >
+                {downloading ? '⏳ Preparing...' : '📑 Download PDF'}
+              </button>
               <button className="btn btn-regenerate" onClick={handleRegenerateCV}>🔄 Regenerate</button>
               <button className="btn btn-new" onClick={() => { setStep(1); setCVText(''); setJobDescription(''); setATSScore(null); }}>➕ New CV</button>
             </div>
