@@ -93,7 +93,7 @@ class AIOptimizer {
         });
       }
 
-      // 4. REBUILD CV WITH OPTIMIZED CONTENT
+      // 4. REBUILD CV WITH OPTIMIZED CONTENT (FIX: Now passes parsedCV which has optimized content)
       const optimizedCVText = this.rebuildCV(parsedCV, improvements);
 
       // 5. GET IMPROVEMENT RECOMMENDATIONS
@@ -242,6 +242,7 @@ class AIOptimizer {
 
   /**
    * Rebuild CV with optimized content
+   * FIX: parsedCV now contains AI-optimized summary and bullets
    */
   rebuildCV(parsedCV, improvements) {
     const lines = [];
@@ -260,7 +261,7 @@ class AIOptimizer {
 
     lines.push('');
 
-    // Professional Summary
+    // Professional Summary (NOW USES AI-OPTIMIZED VERSION)
     if (parsedCV.summary) {
       lines.push('PROFESSIONAL SUMMARY');
       lines.push(parsedCV.summary);
@@ -274,7 +275,7 @@ class AIOptimizer {
       lines.push('');
     }
 
-    // Professional Experience
+    // Professional Experience (NOW USES AI-OPTIMIZED BULLETS)
     if (parsedCV.experience && parsedCV.experience.length > 0) {
       lines.push('PROFESSIONAL EXPERIENCE');
       for (const exp of parsedCV.experience) {
