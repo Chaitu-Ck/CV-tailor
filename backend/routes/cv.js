@@ -1,244 +1,218 @@
 /**
- * CV Tailoring Routes
- * All CV generation and ATS scoring endpoints
+ * CV Routes - DOCX-ONLY
+ * 
+ * All text-based endpoints removed
+ * Pure DOCX workflow
  */
 
 const express = require('express');
 const router = express.Router();
-const atsService = require('../services/atsService');
-const cvParser = require('../services/cvParser');
-const cvGenerator = require('../services/cvGenerator');
-const docxExporter = require('../services/docxExporter');
-const pdfExporter = require('../services/pdfExporter');
+const path = require('path');
+const { upload, validateDocx, handleUploadError } = require('../middleware/uploadMiddleware');
+const docxAtsService = require('../services/docxAtsService');
+const docxModifier = require('../services/docxModifier');
+const docxReader = require('../services/docxReader');
 const logger = require('../utils/logger');
-const { v4: uuidv4 } = require('uuid');
 
 /**
- * POST /api/cv/ats-preview
- * Quick ATS check without full generation
+ * POST /api/cv/analyze-docx
+ * Analyze DOCX for ATS compatibility (no modifications)
+ * 
+ * Body: multipart/form-data
+ * - cvFile: DOCX file
+ * - jobDescription: text
  */
-router.post('/ats-preview', async (req, res) => {
-  try {
-    const { cvText, jobDescription } = req.body;
+router.post(
+  '/analyze-docx',
+  upload.single('cvFile'),
+  handleUploadError,
+  validateDocx,
+  async (req, res) => {
+    const startTime = Date.now();
 
-    if (!cvText || !jobDescription) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'cvText and jobDescription are required',
-        statusCode: 400
-      });
-    }
+    try {
+      const { jobDescription } = req.body;
 
-    const atsResult = await atsService.computeATS(cvText, jobDescription);
-
-    res.json({
-      success: true,
-      atsScore: atsResult
-    });
-  } catch (err) {
-    logger.error('ATS preview failed', err);
-    res.status(500).json({
-      error: 'ATS preview failed',
-      message: err.message,
-      statusCode: 500
-    });
-  }
-});
-
-/**
- * POST /api/cv/parse
- * Parse CV text into structured format
- */
-router.post('/parse', async (req, res) => {
-  try {
-    const { cvText } = req.body;
-
-    if (!cvText || cvText.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'CV text is required',
-        statusCode: 400
-      });
-    }
-
-    const parsed = cvParser.parseCV(cvText);
-    const validation = cvParser.validateStructure(parsed);
-
-    res.json({
-      success: true,
-      parsed,
-      validation
-    });
-  } catch (err) {
-    logger.error('CV parsing failed', err);
-    res.status(500).json({
-      error: 'CV parsing failed',
-      message: err.message,
-      statusCode: 500
-    });
-  }
-});
-
-/**
- * POST /api/cv/generate-tailored
- * Generate job-tailored CV with ATS analysis (MAIN ENDPOINT)
- * Now uses improved CV Generator with keyword optimization
- */
-router.post('/generate-tailored', async (req, res) => {
-  const startTime = Date.now();
-  const generationId = uuidv4();
-
-  try {
-    const {
-      masterCVText,
-      jobDescription,
-      jobTitle = 'Unknown Job',
-      templateType = 'modern'
-    } = req.body;
-
-    // Validate inputs
-    if (!masterCVText || masterCVText.trim().length < 100) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Master CV text is required and must be at least 100 characters',
-        statusCode: 400
-      });
-    }
-
-    if (!jobDescription || jobDescription.trim().length < 100) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Job description is required and must be at least 100 characters',
-        statusCode: 400
-      });
-    }
-
-    // Use improved CV Generator (AWAIT the async function)
-    const generationResult = await cvGenerator.generateOptimizedCV(
-      masterCVText,
-      jobDescription,
-      jobTitle
-    );
-
-    // Parse optimized CV for response
-    const optimizedParsed = cvParser.parseCV(generationResult.generatedText);
-
-    const totalTimeMs = Date.now() - startTime;
-
-    // Build response
-    const response = {
-      success: true,
-      generationId: generationResult.generationId,
-      atsScore: {
-        finalATS: generationResult.atsScore.after.finalATS,
-        color: generationResult.atsScore.after.color,
-        colorName: generationResult.atsScore.after.colorName,
-        keywordScore: generationResult.atsScore.after.keywordScore,
-        skillScore: generationResult.atsScore.after.skillScore.percent,
-        tfidfScore: generationResult.atsScore.after.tfidfScore,
-        embeddingScore: generationResult.atsScore.after.embeddingScore,
-        missingKeywords: generationResult.atsScore.after.missingKeywords.slice(0, 5),
-        missingSkills: generationResult.atsScore.after.skillScore.missingSkills.slice(0, 5),
-        recommendations: generationResult.atsScore.after.recommendations,
-        advice: generationResult.atsScore.after.advice
-      },
-      atsComparison: {
-        before: generationResult.atsScore.before.finalATS,
-        after: generationResult.atsScore.after.finalATS,
-        improvement: generationResult.atsScore.improvement,
-        improvementPercent: generationResult.atsScore.improvementPercent
-      },
-      generatedCV: optimizedParsed,
-      optimizations: generationResult.optimizations,
-      appliedChanges: generationResult.appliedChanges,
-      jobTitle,
-      templateType,
-      metrics: {
-        totalTimeMs
+      // Validate job description
+      if (!jobDescription || jobDescription.trim().length < 50) {
+        return res.status(400).json({
+          error: 'Invalid job description',
+          message: 'Job description must be at least 50 characters'
+        });
       }
-    };
 
-    res.json(response);
-  } catch (err) {
-    logger.error(`❌ [${generationId}] CV generation failed:`, err);
-    res.status(500).json({
-      error: 'CV generation failed',
-      message: err.message,
-      statusCode: 500
-    });
-  }
-});
+      // Analyze DOCX
+      const result = await docxAtsService.validateDocxAts(
+        req.file.buffer,
+        jobDescription
+      );
 
-/**
- * POST /api/cv/export-docx
- * Export CV to DOCX format
- */
-router.post('/export-docx', async (req, res) => {
-  try {
-    const { cvText, jobTitle = 'CV' } = req.body;
+      res.json({
+        ...result,
+        file: {
+          originalName: req.file.originalname,
+          size: req.file.size
+        },
+        totalProcessingMs: Date.now() - startTime
+      });
 
-    if (!cvText) {
-      return res.status(400).json({
-        error: 'CV text is required',
-        statusCode: 400,
+    } catch (error) {
+      logger.error('DOCX analysis failed:', error);
+      res.status(500).json({
+        error: 'Analysis failed',
+        message: error.message
       });
     }
-
-    const result = await docxExporter.exportToDocx(cvText, jobTitle);
-
-    return res.json({
-      success: true,
-      ...result,
-    });
-  } catch (err) {
-    console.error('DOCX export failed', err);
-    return res.status(500).json({
-      error: 'DOCX export failed',
-      message: err.message,
-      statusCode: 500,
-    });
   }
-});
+);
 
 /**
- * POST /api/cv/export-pdf
- * Export CV to PDF format
+ * POST /api/cv/fix-docx-ats
+ * Fix ATS issues in DOCX and return modified file
+ * 
+ * Body: multipart/form-data
+ * - cvFile: DOCX file
+ * - fixOptions: JSON string (optional)
  */
-router.post('/export-pdf', async (req, res) => {
-  try {
-    const { cvText, jobTitle = 'CV' } = req.body;
+router.post(
+  '/fix-docx-ats',
+  upload.single('cvFile'),
+  handleUploadError,
+  validateDocx,
+  async (req, res) => {
+    try {
+      // Parse fix options
+      const fixOptions = req.body.fixOptions ? 
+        JSON.parse(req.body.fixOptions) : {};
 
-    if (!cvText) {
-      return res.status(400).json({
-        error: 'CV text is required',
-        statusCode: 400,
+      // Read DOCX to get structure
+      const docxData = await docxReader.readDocx(req.file.buffer);
+
+      // Fix ATS issues
+      const fixed = await docxModifier.fixAtsIssues(
+        req.file.buffer,
+        docxData.structure,
+        fixOptions
+      );
+
+      // Generate filename
+      const originalName = path.parse(req.file.originalname).name;
+      const modifiedFilename = `${originalName}_ATS_Fixed.docx`;
+
+      // Set headers for file download
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="${modifiedFilename}"`);
+      res.setHeader('X-Modifications', JSON.stringify(fixed.modifications));
+      res.setHeader('X-Processing-Time', fixed.processingTimeMs);
+
+      // Send modified DOCX
+      res.send(fixed.buffer);
+
+      logger.info(`✅ DOCX fixed and sent: ${modifiedFilename}`);
+
+    } catch (error) {
+      logger.error('DOCX fix failed:', error);
+      res.status(500).json({
+        error: 'Fix failed',
+        message: error.message
       });
     }
-
-    const result = await pdfExporter.exportToPdf(cvText, jobTitle);
-
-    return res.json({
-      success: true,
-      ...result,
-    });
-  } catch (err) {
-    console.error('PDF export failed', err);
-    return res.status(500).json({
-      error: 'PDF export failed',
-      message: err.message,
-      statusCode: 500,
-    });
   }
-});
+);
+
+/**
+ * POST /api/cv/optimize-docx
+ * Analyze + Fix + AI Optimization (complete workflow)
+ * 
+ * Body: multipart/form-data
+ * - cvFile: DOCX file
+ * - jobDescription: text
+ */
+router.post(
+  '/optimize-docx',
+  upload.single('cvFile'),
+  handleUploadError,
+  validateDocx,
+  async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+      const { jobDescription } = req.body;
+
+      if (!jobDescription || jobDescription.trim().length < 50) {
+        return res.status(400).json({
+          error: 'Invalid job description',
+          message: 'Job description must be at least 50 characters'
+        });
+      }
+
+      // Step 1: Analyze
+      const analysis = await docxAtsService.validateDocxAts(
+        req.file.buffer,
+        jobDescription
+      );
+
+      // Step 2: Fix structure issues
+      const docxData = await docxReader.readDocx(req.file.buffer);
+      const fixed = await docxModifier.fixAtsIssues(
+        req.file.buffer,
+        docxData.structure
+      );
+
+      // Step 3: Re-analyze to confirm improvements
+      const reanalysis = await docxAtsService.validateDocxAts(
+        fixed.buffer,
+        jobDescription
+      );
+
+      // Generate filename
+      const originalName = path.parse(req.file.originalname).name;
+      const optimizedFilename = `${originalName}_ATS_Optimized.docx`;
+
+      // Return both analysis and file
+      res.json({
+        success: true,
+        analysis: {
+          before: {
+            score: analysis.finalScore,
+            issues: analysis.breakdown.structure.issues.length,
+            warnings: analysis.breakdown.structure.warnings.length
+          },
+          after: {
+            score: reanalysis.finalScore,
+            issues: reanalysis.breakdown.structure.issues.length,
+            warnings: reanalysis.breakdown.structure.warnings.length
+          },
+          improvement: reanalysis.finalScore - analysis.finalScore
+        },
+        modifications: fixed.modifications,
+        recommendations: reanalysis.recommendations,
+        download: {
+          filename: optimizedFilename,
+          url: `/api/cv/download/${req.file.originalname}` // Implement download endpoint
+        },
+        processingTimeMs: Date.now() - startTime
+      });
+
+    } catch (error) {
+      logger.error('DOCX optimization failed:', error);
+      res.status(500).json({
+        error: 'Optimization failed',
+        message: error.message
+      });
+    }
+  }
+);
 
 /**
  * GET /api/cv/health
- * Health check for CV service
+ * Health check
  */
 router.get('/health', (req, res) => {
   res.json({
-    service: 'CV Service',
+    service: 'CV Tailor DOCX Service',
     status: 'healthy',
+    version: '2.0.0',
     timestamp: new Date().toISOString()
   });
 });

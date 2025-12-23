@@ -9,7 +9,7 @@ import GenerationProgress from './components/GenerationProgress';
 import './App.css';
 
 function App() {
-  const [cvText, setCVText] = useState('');
+  const [cvFile, setCVFile] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [atsScore, setATSScore] = useState(null);
@@ -18,99 +18,144 @@ function App() {
   const [step, setStep] = useState(1); // 1: Upload, 2: Preview, 3: Results
   const [generationData, setGenerationData] = useState(null);
   const [originalCV, setOriginalCV] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
-  const handleCVUpload = (text) => {
-    setCVText(text);
-    setOriginalCV(text);
+  const handleCVUpload = (file) => {
+    setCVFile(file);
+    setOriginalCV(file);
     setStep(2);
   };
 
   const handleATSPreview = async () => {
-    if (!cvText.trim() || !jobDescription.trim()) {
-      toast.error('Please provide both CV and job description');
+    if (!cvFile) {
+      toast.error('Please provide a CV file');
+      return;
+    }
+    
+    if (!jobDescription.trim()) {
+      toast.error('Please provide a job description');
+      return;
+    }
+
+    if (jobDescription.trim().length < 50) {
+      toast.error('Job description must be at least 50 characters');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/cv/ats-preview', {
+      const formData = new FormData();
+      formData.append('cvFile', cvFile);
+      formData.append('jobDescription', jobDescription);
+
+      const response = await fetch('/api/cv/analyze-docx', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cvText, jobDescription })
+        body: formData
       });
 
-      if (!response.ok) throw new Error('Failed to calculate ATS score');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to analyze DOCX');
+      }
 
       const data = await response.json();
-      setATSScore(data.atsScore);
-      toast.success('ATS score calculated!');
+      setATSScore(data);
+      setAnalysisResult(data);
+      toast.success('DOCX analyzed successfully!');
     } catch (error) {
-      toast.error(error.message || 'Error calculating ATS score');
+      toast.error(error.message || 'Error analyzing DOCX');
     } finally {
       setLoading(false);
     }
   };
 
   const handleGenerateTailoredCV = async () => {
-    if (!cvText.trim() || !jobDescription.trim()) {
-      toast.error('Please provide both CV and job description');
+    if (!cvFile) {
+      toast.error('Please provide a CV file');
+      return;
+    }
+    
+    if (!jobDescription.trim()) {
+      toast.error('Please provide a job description');
+      return;
+    }
+    
+    if (jobDescription.trim().length < 50) {
+      toast.error('Job description must be at least 50 characters');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/cv/generate-tailored', {
+      const formData = new FormData();
+      formData.append('cvFile', cvFile);
+      formData.append('jobDescription', jobDescription);
+
+      const response = await fetch('/api/cv/optimize-docx', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          masterCVText: cvText,
-          jobDescription,
-          jobTitle: jobTitle || 'Job',
-          templateType: 'modern'
-        })
+        body: formData
       });
 
-      if (!response.ok) throw new Error('Failed to generate tailored CV');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to optimize DOCX');
+      }
 
       const data = await response.json();
       setGenerationData(data);
-      setATSScore(data.atsScore);
+      setATSScore(data);
       setStep(3);
-      toast.success('CV tailored successfully!');
+      toast.success('DOCX optimized successfully!');
     } catch (error) {
-      toast.error(error.message || 'Error generating tailored CV');
+      toast.error(error.message || 'Error optimizing DOCX');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDownloadDOCX = async () => {
-    if (!generationData) {
-      toast.error('No CV to download');
+    if (!cvFile) {
+      toast.error('Please provide a CV file');
+      return;
+    }
+    
+    if (!jobDescription.trim()) {
+      toast.error('Please provide a job description');
+      return;
+    }
+    
+    if (jobDescription.trim().length < 50) {
+      toast.error('Job description must be at least 50 characters');
       return;
     }
 
     setDownloading(true);
     try {
-      // Reconstruct CV text from generated CV data
-      const cvTextToExport = reconstructCVText(generationData.generatedCV);
+      const formData = new FormData();
+      formData.append('cvFile', cvFile);
+      formData.append('jobDescription', jobDescription);
 
-      const response = await fetch('/api/cv/export-docx', {
+      const response = await fetch('/api/cv/fix-docx-ats', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cvText: cvTextToExport,
-          jobTitle: jobTitle || 'CV'
-        })
+        body: formData
       });
 
-      if (!response.ok) throw new Error('Failed to generate DOCX');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fix DOCX');
+      }
 
-      const data = await response.json();
+      // Create download link from response
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', `${cvFile.name.replace('.docx', '')}_ATS_Fixed.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       
-      // Open download URL in new tab
-      window.open(data.downloadUrl, '_blank');
-      toast.success('📄 DOCX downloaded successfully!');
+      toast.success('📄 Fixed DOCX downloaded successfully!');
     } catch (error) {
       toast.error(error.message || 'Error downloading DOCX');
     } finally {
@@ -119,113 +164,16 @@ function App() {
   };
 
   const handleDownloadPDF = async () => {
-    if (!generationData) {
-      toast.error('No CV to download');
-      return;
-    }
-
-    setDownloading(true);
-    try {
-      // Reconstruct CV text from generated CV data
-      const cvTextToExport = reconstructCVText(generationData.generatedCV);
-
-      const response = await fetch('/api/cv/export-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cvText: cvTextToExport,
-          jobTitle: jobTitle || 'CV'
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to generate PDF');
-
-      const data = await response.json();
-      
-      // Open download URL in new tab
-      window.open(data.downloadUrl, '_blank');
-      toast.success('📑 PDF downloaded successfully!');
-    } catch (error) {
-      toast.error(error.message || 'Error downloading PDF');
-    } finally {
-      setDownloading(false);
-    }
+    toast.warn('PDF export is not available in the DOCX-only version. Please use the DOCX download option.');
   };
 
-  // Helper function to reconstruct CV text from parsed CV object
-  const reconstructCVText = (parsedCV) => {
-    const lines = [];
 
-    // Header
-    if (parsedCV.header) {
-      if (parsedCV.header.name) lines.push(parsedCV.header.name.toUpperCase());
-      const contact = [
-        parsedCV.header.location,
-        parsedCV.header.phone,
-        parsedCV.header.email,
-        parsedCV.header.linkedin
-      ].filter(x => x).join(' | ');
-      if (contact) lines.push(contact);
-      lines.push('');
-    }
-
-    // Summary
-    if (parsedCV.summary) {
-      lines.push('PROFESSIONAL SUMMARY');
-      lines.push(parsedCV.summary);
-      lines.push('');
-    }
-
-    // Skills
-    if (parsedCV.skills && parsedCV.skills.length > 0) {
-      lines.push('CORE COMPETENCIES');
-      lines.push(parsedCV.skills.join(', '));
-      lines.push('');
-    }
-
-    // Experience
-    if (parsedCV.experience && parsedCV.experience.length > 0) {
-      lines.push('PROFESSIONAL EXPERIENCE');
-      parsedCV.experience.forEach(exp => {
-        lines.push('');
-        lines.push(`${exp.title} | ${exp.company}`);
-        if (exp.startDate || exp.endDate) {
-          lines.push(`${exp.startDate || ''} - ${exp.endDate || 'Present'}`);
-        }
-        if (exp.bullets) {
-          exp.bullets.forEach(bullet => {
-            lines.push(`  • ${bullet}`);
-          });
-        }
-      });
-      lines.push('');
-    }
-
-    // Education
-    if (parsedCV.education && parsedCV.education.length > 0) {
-      lines.push('EDUCATION');
-      parsedCV.education.forEach(edu => {
-        lines.push(`${edu.degree} | ${edu.institution}`);
-        if (edu.year) lines.push(`Year: ${edu.year}`);
-      });
-      lines.push('');
-    }
-
-    // Certifications
-    if (parsedCV.certifications && parsedCV.certifications.length > 0) {
-      lines.push('CERTIFICATIONS');
-      parsedCV.certifications.forEach(cert => {
-        lines.push(`  ✓ ${cert}`);
-      });
-    }
-
-    return lines.join('\n');
-  };
 
   const handleRegenerateCV = () => {
     setStep(2);
     setGenerationData(null);
     setATSScore(null);
+    setAnalysisResult(null);
   };
 
   return (
@@ -280,7 +228,7 @@ function App() {
                     onClick={handleGenerateTailoredCV}
                     disabled={loading}
                   >
-                    {loading ? 'Generating...' : '✨ Generate Tailored CV'}
+                    {loading ? 'Optimizing...' : '✨ Optimize DOCX for ATS'}
                   </button>
                 )}
               </div>
@@ -292,28 +240,28 @@ function App() {
         {step === 3 && generationData && (
           <>
             <div className="card results-summary">
-              <h2>🎉 CV Generated Successfully!</h2>
+              <h2>🎉 DOCX Optimized Successfully!</h2>
               <div className="metrics">
                 <div className="metric">
                   <span>Before</span>
-                  <strong>{generationData.atsComparison.before}%</strong>
+                  <strong>{generationData.analysis?.before?.score || generationData.before?.score || 'N/A'}%</strong>
                 </div>
                 <div className="metric arrow">→</div>
                 <div className="metric">
                   <span>After</span>
-                  <strong>{generationData.atsComparison.after}%</strong>
+                  <strong>{generationData.analysis?.after?.score || generationData.after?.score || 'N/A'}%</strong>
                 </div>
                 <div className="metric improvement">
                   <span>Improvement</span>
-                  <strong>+{generationData.atsComparison.improvement}%</strong>
+                  <strong>+{generationData.analysis?.improvement || generationData.improvement || 'N/A'}%</strong>
                 </div>
               </div>
             </div>
 
             <CVComparison
               originalCV={originalCV}
-              generatedCV={generationData.generatedCV}
-              atsImprovement={generationData.atsComparison}
+              generatedCV={generationData.generatedCV || originalCV}
+              atsImprovement={generationData.analysis || generationData}
             />
 
             <div className="action-buttons">
@@ -332,7 +280,7 @@ function App() {
                 {downloading ? '⏳ Preparing...' : '📑 Download PDF'}
               </button>
               <button className="btn btn-regenerate" onClick={handleRegenerateCV}>🔄 Regenerate</button>
-              <button className="btn btn-new" onClick={() => { setStep(1); setCVText(''); setJobDescription(''); setATSScore(null); }}>➕ New CV</button>
+              <button className="btn btn-new" onClick={() => { setStep(1); setCVFile(null); setJobDescription(''); setATSScore(null); setOriginalCV(null); setGenerationData(null); setAnalysisResult(null); }}>➕ New DOCX</button>
             </div>
           </>
         )}

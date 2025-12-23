@@ -1,53 +1,50 @@
 import React from 'react';
 
 function CVComparison({ originalCV, generatedCV, atsImprovement }) {
+  // Handle the new DOCX-only response format
   const formatCV = (cv) => {
     if (typeof cv === 'string') return cv;
     if (!cv) return 'No CV data available';
 
+    // Check if it's a file object (for originalCV)
+    if (cv.name && cv.size) {
+      return `DOCX File: ${cv.name}
+Size: ${cv.size} bytes
+Type: ${cv.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+
+Content will be processed on the server side.`;
+    }
+    
+    // For structured CV data (if available)
     let text = '';
     if (cv.header) {
-      text += `${cv.header.name || ''}
-`;
-      if (cv.header.email) text += `Email: ${cv.header.email}
-`;
-      if (cv.header.phone) text += `Phone: ${cv.header.phone}
-`;
+      text += `${cv.header.name || ''}\n`;
+      if (cv.header.email) text += `Email: ${cv.header.email}\n`;
+      if (cv.header.phone) text += `Phone: ${cv.header.phone}\n`;
       text += '\n';
     }
 
-    if (cv.summary) text += `SUMMARY
-${cv.summary}
-
-`;
+    if (cv.summary) text += `SUMMARY\n${cv.summary}\n\n`;
 
     if (cv.skills && cv.skills.length > 0) {
-      text += `SKILLS
-${cv.skills.join(' | ')}
-
-`;
+      text += `SKILLS\n${cv.skills.join(' | ')}\n\n`;
     }
 
     if (cv.experience && cv.experience.length > 0) {
-      text += `EXPERIENCE
-`;
+      text += `EXPERIENCE\n`;
       cv.experience.forEach((exp) => {
-        text += `${exp.title} at ${exp.company} (${exp.startDate} - ${exp.endDate})
-`;
+        text += `${exp.title} at ${exp.company} (${exp.startDate} - ${exp.endDate})\n`;
         exp.bullets.forEach((bullet) => {
-          text += `- ${bullet}
-`;
+          text += `- ${bullet}\n`;
         });
         text += '\n';
       });
     }
 
     if (cv.education && cv.education.length > 0) {
-      text += `EDUCATION
-`;
+      text += `EDUCATION\n`;
       cv.education.forEach((edu) => {
-        text += `${edu.degree} from ${edu.institution} (${edu.year})
-`;
+        text += `${edu.degree} from ${edu.institution} (${edu.year})\n`;
       });
     }
 
@@ -94,7 +91,7 @@ ${cv.skills.join(' | ')}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '5px' }}>Before</div>
             <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#ef4444' }}>
-              {atsImprovement.before}%
+              {(atsImprovement.analysis?.before?.score || atsImprovement.before || 'N/A')}%
             </div>
           </div>
           <div style={{ textAlign: 'center' }}>
@@ -103,7 +100,7 @@ ${cv.skills.join(' | ')}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '5px' }}>After</div>
             <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#16a34a' }}>
-              {atsImprovement.after}%
+              {(atsImprovement.analysis?.after?.score || atsImprovement.after || 'N/A')}%
             </div>
           </div>
         </div>
@@ -115,7 +112,7 @@ ${cv.skills.join(' | ')}
           textAlign: 'center'
         }}>
           <span style={{ color: '#16a34a', fontWeight: '700', fontSize: '1.1rem' }}>
-            🚀 +{atsImprovement.improvement}% Improvement ({atsImprovement.improvementPercent}%)
+            🚀 +{(atsImprovement.analysis?.improvement || atsImprovement.improvement || 'N/A')}% Improvement ({atsImprovement.improvementPercent || 'N/A'}%)
           </span>
         </div>
       </div>
