@@ -184,12 +184,11 @@ router.post('/export-docx', async (req, res) => {
       });
     }
 
-    const { filename, filepath } = await docxExporter.exportToDocx(cvText, jobTitle);
+    const result = await docxExporter.exportToDocx(cvText, jobTitle);
 
     return res.json({
       success: true,
-      filename,
-      downloadUrl: `/exports/${filename}`,
+      ...result,
     });
   } catch (err) {
     console.error('DOCX export failed', err);
@@ -216,12 +215,11 @@ router.post('/export-pdf', async (req, res) => {
       });
     }
 
-    const { filename, filepath } = await pdfExporter.exportToPdf(cvText, jobTitle);
+    const result = await pdfExporter.exportToPdf(cvText, jobTitle);
 
     return res.json({
       success: true,
-      filename,
-      downloadUrl: `/exports/${filename}`,
+      ...result,
     });
   } catch (err) {
     console.error('PDF export failed', err);

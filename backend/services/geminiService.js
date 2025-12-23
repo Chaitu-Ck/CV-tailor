@@ -16,7 +16,7 @@ class GeminiService {
       this.client = null;
     } else {
       this.client = new GoogleGenerativeAI(apiKey);
-      this.model = this.client.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-2.5-flash' });
+      this.model = this.client.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-2.5-pro' });
     }
   }
 
