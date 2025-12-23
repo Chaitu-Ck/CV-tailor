@@ -8,6 +8,8 @@ const router = express.Router();
 const atsService = require('../services/atsService');
 const cvParser = require('../services/cvParser');
 const cvGenerator = require('../services/cvGenerator');
+const docxExporter = require('../services/docxExporter');
+const pdfExporter = require('../services/pdfExporter');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
@@ -163,6 +165,70 @@ router.post('/generate-tailored', async (req, res) => {
       error: 'CV generation failed',
       message: err.message,
       statusCode: 500
+    });
+  }
+});
+
+/**
+ * POST /api/cv/export-docx
+ * Export CV to DOCX format
+ */
+router.post('/export-docx', async (req, res) => {
+  try {
+    const { cvText, jobTitle = 'CV' } = req.body;
+
+    if (!cvText) {
+      return res.status(400).json({
+        error: 'CV text is required',
+        statusCode: 400,
+      });
+    }
+
+    const { filename, filepath } = await docxExporter.exportToDocx(cvText, jobTitle);
+
+    return res.json({
+      success: true,
+      filename,
+      downloadUrl: `/exports/${filename}`,
+    });
+  } catch (err) {
+    console.error('DOCX export failed', err);
+    return res.status(500).json({
+      error: 'DOCX export failed',
+      message: err.message,
+      statusCode: 500,
+    });
+  }
+});
+
+/**
+ * POST /api/cv/export-pdf
+ * Export CV to PDF format
+ */
+router.post('/export-pdf', async (req, res) => {
+  try {
+    const { cvText, jobTitle = 'CV' } = req.body;
+
+    if (!cvText) {
+      return res.status(400).json({
+        error: 'CV text is required',
+        statusCode: 400,
+      });
+    }
+
+    const { filename, filepath } = await pdfExporter.exportToPdf(cvText, jobTitle);
+
+    return res.json({
+      success: true,
+      filename,
+      downloadUrl: `/exports/${filename}`,
+    });
+  } catch (err) {
+    console.error('PDF export failed', err);
+    return res.status(500).json({
+      error: 'PDF export failed',
+      message: err.message,
+      statusCode: 500,
     });
   }
 });

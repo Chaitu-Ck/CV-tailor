@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const Redis = require('ioredis');
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -44,6 +45,9 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Request logging
 app.use(requestLogger);
+
+// Serve exported files
+app.use('/exports', express.static(path.join(__dirname, 'backend/exports')));
 
 // ============================================================================
 // DATABASE & CACHE INITIALIZATION
